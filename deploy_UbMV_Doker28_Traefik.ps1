@@ -6,24 +6,24 @@
 # Traefik : v3.3, wildcard cert *.deviaaps.com via Cloudflare DNS-01
 # ============================================================
 
-# --- Configuration -----------------------------------------------------------
-$PROJECT       = "YOUR_GCP_PROJECT_ID"
-$ZONE          = "us-south1-c"
-$VM_NAME       = "ubuntu-vm-docker28"
-$MACHINE_TYPE  = "n2-custom-4-16384"   # 4 vCPUs, 16 384 MB RAM
+# --- Load configuration from .env --------------------------------------------
+$_envFile = Join-Path $PSScriptRoot ".env"
+if (-not (Test-Path $_envFile)) {
+    Write-Error ".env not found at: $_envFile`nCopy .env.example to .env and fill in your values."
+    exit 1
+}
+Get-Content $_envFile | ForEach-Object {
+    if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
+        Set-Variable -Name $matches[1] -Value $matches[2]
+    }
+}
+
+# --- Static configuration (not user-specific) --------------------------------
 $IMAGE_FAMILY  = "ubuntu-2404-lts-amd64"
 $IMAGE_PROJECT = "ubuntu-os-cloud"
 $DISK_SIZE     = "50GB"
 $DISK_TYPE     = "pd-ssd"
 $NETWORK_TAG   = "ssh-server"
-$FW_RULE_SSH   = "allow-ssh-external"
-$FW_RULE_WEB   = "allow-http-https-external"
-$SSH_KEY_FILE  = "YOUR_SSH_KEY_PATH.pub"
-$SSH_KEY_PRIV  = "YOUR_SSH_KEY_PATH"
-$SSH_USERNAME  = "gcvmuser"
-$TRAEFIK_DIR   = "/home/gcvmuser/traefik"
-$ADMIN_PASS    = "YOUR_ADMIN_PASSWORD"
-$CF_TOKEN      = "YOUR_CLOUDFLARE_API_TOKEN"
 
 $SCRIPT_DIR = $PSScriptRoot
 
@@ -45,7 +45,7 @@ Write-Host "Project : $PROJECT"
 Write-Host "VM Name : $VM_NAME"
 Write-Host "Machine : $MACHINE_TYPE"
 Write-Host "Zone    : $ZONE"
-Write-Host "Domain  : *.deviaaps.com"
+Write-Host "Domain  : *.$DOMAIN"
 Write-Host "User    : $SSH_USERNAME"
 Write-Host ""
 
@@ -228,9 +228,12 @@ HASH=$(htpasswd -nbs admin '__ADMIN_PASS__' | tr -d '\n')
 echo "Dashboard auth hash generated" | tee -a /tmp/traefik-setup.log
 
 # Create .env for docker-compose variable substitution
-printf 'CF_DNS_API_TOKEN=__CF_TOKEN__\n'           > .env
-printf 'CF_API_TOKEN=__CF_TOKEN__\n'               >> .env
-printf 'TRAEFIK_DASHBOARD_AUTH=%s\n' "$HASH"       >> .env
+printf 'CF_DNS_API_TOKEN=__CF_TOKEN__\n'               > .env
+printf 'CF_API_TOKEN=__CF_TOKEN__\n'                   >> .env
+printf 'TRAEFIK_DASHBOARD_AUTH=%s\n' "$HASH"           >> .env
+printf 'ACME_EMAIL=__ACME_EMAIL__\n'                   >> .env
+printf 'DOMAIN=__DOMAIN__\n'                           >> .env
+printf 'TRAEFIK_DASHBOARD_PASS=__ADMIN_PASS__\n'       >> .env
 echo "Created .env file" | tee -a /tmp/traefik-setup.log
 
 # Start all services
@@ -240,14 +243,16 @@ echo "=== Services Status ===" | tee -a /tmp/traefik-setup.log
 docker compose ps | tee -a /tmp/traefik-setup.log
 echo "" | tee -a /tmp/traefik-setup.log
 echo "=== Traefik Setup Complete: $(date) ===" | tee -a /tmp/traefik-setup.log
-echo "Dashboard : https://traefik.deviaaps.com  (admin / __ADMIN_PASS__)" | tee -a /tmp/traefik-setup.log
-echo "Test svc  : https://whoami.deviaaps.com" | tee -a /tmp/traefik-setup.log
+echo "Dashboard : https://traefik.__DOMAIN__  (admin / __ADMIN_PASS__)" | tee -a /tmp/traefik-setup.log
+echo "Test svc  : https://whoami.__DOMAIN__" | tee -a /tmp/traefik-setup.log
 '@
 
 $TRAEFIK_SETUP = $TRAEFIK_SETUP_TEMPLATE `
     -replace '__TRAEFIK_DIR__', $TRAEFIK_DIR `
     -replace '__ADMIN_PASS__',  $ADMIN_PASS `
-    -replace '__CF_TOKEN__',    $CF_TOKEN
+    -replace '__CF_TOKEN__',    $CF_TOKEN `
+    -replace '__ACME_EMAIL__',  $ACME_EMAIL `
+    -replace '__DOMAIN__',      $DOMAIN
 
 $TRAEFIK_SETUP_PATH = "$env:TEMP\traefik-setup.sh"
 $SETUP_LF = $TRAEFIK_SETUP -replace "`r`n", "`n"
@@ -293,14 +298,14 @@ Write-Host ""
 Write-Host "=== Deployment Complete ===" -ForegroundColor Green
 Write-Host "External IP : $EXTERNAL_IP"
 Write-Host ""
-Write-Host "IMPORTANT - Add these DNS A records in Cloudflare (zone: deviaaps.com):" -ForegroundColor Yellow
-Write-Host "  traefik.deviaaps.com  -> $EXTERNAL_IP"
-Write-Host "  whoami.deviaaps.com   -> $EXTERNAL_IP"
-Write-Host "  (or wildcard: *.deviaaps.com -> $EXTERNAL_IP)"
+Write-Host "IMPORTANT - Add these DNS A records in Cloudflare (zone: $DOMAIN):" -ForegroundColor Yellow
+Write-Host "  traefik.$DOMAIN  -> $EXTERNAL_IP"
+Write-Host "  whoami.$DOMAIN   -> $EXTERNAL_IP"
+Write-Host "  (or wildcard: *.$DOMAIN -> $EXTERNAL_IP)"
 Write-Host ""
 Write-Host "Services:" -ForegroundColor Cyan
-Write-Host "  Traefik Dashboard : https://traefik.deviaaps.com  (admin / $ADMIN_PASS)"
-Write-Host "  Test Service      : https://whoami.deviaaps.com"
+Write-Host "  Traefik Dashboard : https://traefik.$DOMAIN  (admin / $ADMIN_PASS)"
+Write-Host "  Test Service      : https://whoami.$DOMAIN"
 Write-Host ""
 Write-Host "SSH access:" -ForegroundColor Cyan
 Write-Host "  ssh -i $SSH_KEY_PRIV ${SSH_USERNAME}@${EXTERNAL_IP}"

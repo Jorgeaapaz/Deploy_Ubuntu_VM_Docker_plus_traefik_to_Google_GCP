@@ -14,11 +14,20 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 DOMAIN="deviaaps.com"
-TRAEFIK_HOST="traefik.${DOMAIN}"
-WHOAMI_HOST="whoami.${DOMAIN}"
+TRAEFIK_DIR="/home/gcvmuser/traefik"
 DASHBOARD_USER="admin"
 DASHBOARD_PASS="YOUR_ADMIN_PASSWORD"
-TRAEFIK_DIR="/home/gcvmuser/traefik"
+
+# Override defaults from the traefik .env if available
+if [ -f "${TRAEFIK_DIR}/.env" ]; then
+    _d=$(grep '^DOMAIN=' "${TRAEFIK_DIR}/.env" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '\r')
+    _p=$(grep '^TRAEFIK_DASHBOARD_PASS=' "${TRAEFIK_DIR}/.env" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '\r')
+    [ -n "$_d" ] && DOMAIN="$_d"
+    [ -n "$_p" ] && DASHBOARD_PASS="$_p"
+fi
+
+TRAEFIK_HOST="traefik.${DOMAIN}"
+WHOAMI_HOST="whoami.${DOMAIN}"
 
 pass() { echo -e "${GREEN}[PASS]${NC} $1"; ((PASS++)); }
 fail() { echo -e "${RED}[FAIL]${NC} $1"; ((FAIL++)); }

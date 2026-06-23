@@ -4,10 +4,18 @@
 # Usage: .\test\test_traefik.ps1
 # ============================================================
 
-$PROJECT    = "YOUR_GCP_PROJECT_ID"
-$ZONE       = "us-south1-c"
-$VM_NAME    = "ubuntu-vm-docker28"
-$SSH_USER   = "gcvmuser"
+# --- Load configuration from .env (one level up, in project root) ------------
+$_envFile = Join-Path (Split-Path $PSScriptRoot) ".env"
+if (-not (Test-Path $_envFile)) {
+    Write-Error ".env not found at: $_envFile`nCopy .env.example to .env and fill in your values."
+    exit 1
+}
+Get-Content $_envFile | ForEach-Object {
+    if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
+        Set-Variable -Name $matches[1] -Value $matches[2]
+    }
+}
+$SSH_USER   = $SSH_USERNAME   # alias used in this script
 $SCRIPT_DIR = $PSScriptRoot
 $BASH_SCRIPT = Join-Path $SCRIPT_DIR "test_traefik_vm.sh"
 $REMOTE_PATH = "/tmp/test_traefik_vm.sh"

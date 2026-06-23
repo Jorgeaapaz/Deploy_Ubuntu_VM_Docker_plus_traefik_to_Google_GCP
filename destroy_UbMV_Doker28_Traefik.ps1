@@ -7,13 +7,18 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# --- Configuration (must match deploy_UbMV_Doker28_Traefik.ps1) -------------
-$PROJECT      = "YOUR_GCP_PROJECT_ID"
-$ZONE         = "us-south1-c"
-$VM_NAME      = "ubuntu-vm-docker28"
-$FW_RULE_SSH  = "allow-ssh-external"
-$FW_RULE_WEB  = "allow-http-https-external"
-$DISK_NAME    = $VM_NAME   # GCP names the boot disk after the VM by default
+# --- Load configuration from .env (must match deploy_UbMV_Doker28_Traefik.ps1) ---
+$_envFile = Join-Path $PSScriptRoot ".env"
+if (-not (Test-Path $_envFile)) {
+    Write-Error ".env not found at: $_envFile`nCopy .env.example to .env and fill in your values."
+    exit 1
+}
+Get-Content $_envFile | ForEach-Object {
+    if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
+        Set-Variable -Name $matches[1] -Value $matches[2]
+    }
+}
+$DISK_NAME = $VM_NAME   # GCP names the boot disk after the VM by default
 
 Write-Host "`n=== Google Cloud Teardown (Ubuntu + Docker 28 + Traefik v3.3) ===" -ForegroundColor Red
 Write-Host "Project : $PROJECT"
